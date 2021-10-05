@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/wneessen/postfix-policy-server"
 	"log"
 )
@@ -10,7 +11,7 @@ type Hn struct {
 }
 
 func main() {
-	s := postfix_policy_server.New()
+	s := pps.New()
 	ctx := context.Background()
 	h := Hn{}
 
@@ -19,6 +20,8 @@ func main() {
 	}
 }
 
-func (h Hn) Handle() string {
-	return ""
+func (h Hn) Handle(ps *pps.PolicySet) pps.PostfixResp {
+	fmt.Printf("All Data: %+v\n", ps)
+
+	return pps.RespReject
 }

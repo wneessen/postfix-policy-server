@@ -1,4 +1,4 @@
-package postfix_policy_server
+package pps
 
 import (
 	"bufio"
@@ -8,11 +8,140 @@ import (
 	"log"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/rs/xid"
 )
+
+// Possible responses to the postfix server
+// See: http://www.postfix.org/access.5.html
+const (
+	RespOk            PostfixResp = "OK"
+	RespReject        PostfixResp = "REJECT"
+	RespDefer         PostfixResp = "DEFER"
+	RespDeferIfReject PostfixResp = "DEFER_IF_REJECT"
+	RespDeferIfPermit PostfixResp = "DEFER_IF_PERMIT"
+	RespDiscard       PostfixResp = "DISCARD"
+	RespDunno         PostfixResp = "DUNNO"
+	RespHold          PostfixResp = "HOLD"
+	RespInfo          PostfixResp = "INFO"
+	RespWarn          PostfixResp = "WARN"
+)
+
+// polSetFuncs is a map of polSetFunc that assigns a given value to a PolicySet
+// See http://www.postfix.org/SMTPD_POLICY_README.html for all supported values
+var polSetFuncs = map[string]polSetFunc{
+	"request":        func(ps *PolicySet, v string) { ps.Request = v },
+	"protocol_state": func(ps *PolicySet, v string) { ps.ProtocolState = v },
+	"protocol_name":  func(ps *PolicySet, v string) { ps.ProtocolName = v },
+	"helo_name":      func(ps *PolicySet, v string) { ps.HELOName = v },
+	"queue_id":       func(ps *PolicySet, v string) { ps.QueueId = v },
+	"sender":         func(ps *PolicySet, v string) { ps.Sender = v },
+	"recipient":      func(ps *PolicySet, v string) { ps.Recipient = v },
+	"recipient_count": func(ps *PolicySet, v string) {
+		rc, err := strconv.ParseUint(v, 10, 64)
+		if err == nil {
+			ps.RecipientCount = rc
+		}
+	},
+	"client_address": func(ps *PolicySet, v string) {
+		ca := net.ParseIP(v)
+		ps.ClientAddress = ca
+	},
+	"client_name":         func(ps *PolicySet, v string) { ps.ClientName = v },
+	"reverse_client_name": func(ps *PolicySet, v string) { ps.ReverseClientName = v },
+	"instance":            func(ps *PolicySet, v string) { ps.Instance = v },
+	"sasl_method":         func(ps *PolicySet, v string) { ps.SASLMethod = v },
+	"sasl_username":       func(ps *PolicySet, v string) { ps.SASLUsername = v },
+	"sasl_sender":         func(ps *PolicySet, v string) { ps.SASLSender = v },
+	"size": func(ps *PolicySet, v string) {
+		s, err := strconv.ParseUint(v, 10, 64)
+		if err == nil {
+			ps.Size = s
+		}
+	},
+	"ccert_subject":       func(ps *PolicySet, v string) { ps.CCertSubject = v },
+	"ccert_issuer":        func(ps *PolicySet, v string) { ps.CCertIssuer = v },
+	"ccert_fingerprint":   func(ps *PolicySet, v string) { ps.CCertFingerprint = v },
+	"encryption_protocol": func(ps *PolicySet, v string) { ps.EncryptionProtocol = v },
+	"encryption_cipher":   func(ps *PolicySet, v string) { ps.EncryptionCipher = v },
+	"encryption_keysize": func(ps *PolicySet, v string) {
+		ks, err := strconv.ParseUint(v, 10, 64)
+		if err == nil {
+			ps.EncryptionKeysize = ks
+		}
+	},
+	"etrn_domain":              func(ps *PolicySet, v string) { ps.ETRNDomain = v },
+	"stress":                   func(ps *PolicySet, v string) { ps.Stress = v == "yes" },
+	"ccert_pubkey_fingerprint": func(ps *PolicySet, v string) { ps.CCertPubkeyFingerprint = v },
+	"client_port": func(ps *PolicySet, v string) {
+		cp, err := strconv.ParseUint(v, 10, 64)
+		if err == nil {
+			ps.ClientPort = cp
+		}
+	},
+	"policy_context": func(ps *PolicySet, v string) { ps.PolicyContext = v },
+	"server_address": func(ps *PolicySet, v string) {
+		sa := net.ParseIP(v)
+		ps.ServerAddress = sa
+	},
+	"server_port": func(ps *PolicySet, v string) {
+		sp, err := strconv.ParseUint(v, 10, 64)
+		if err == nil {
+			ps.ServerPort = sp
+		}
+	},
+}
+
+// PolicySet is a set information provided by the postfix policyd request
+type PolicySet struct {
+	// Postfix version 2.1 and later
+	Request           string
+	ProtocolState     string
+	ProtocolName      string
+	HELOName          string
+	QueueId           string
+	Sender            string
+	Recipient         string
+	RecipientCount    uint64
+	ClientAddress     net.IP
+	ClientName        string
+	ReverseClientName string
+	Instance          string
+
+	// Postfix version 2.2 and later
+	SASLMethod       string
+	SASLUsername     string
+	SASLSender       string
+	Size             uint64
+	CCertSubject     string
+	CCertIssuer      string
+	CCertFingerprint string
+
+	// Postfix version 2.3 and later
+	EncryptionProtocol string
+	EncryptionCipher   string
+	EncryptionKeysize  uint64
+	ETRNDomain         string
+
+	// Postfix version 2.5 and later
+	Stress bool
+
+	// Postfix version 2.9 and later
+	CCertPubkeyFingerprint string
+
+	// Postfix version 3.0 and later
+	ClientPort uint64
+
+	// Postfix version 3.1 and later
+	PolicyContext string
+
+	// Postfix version 3.2 and later
+	ServerAddress net.IP
+	ServerPort    uint64
+}
 
 // Connection represents an incoming policy server connection
 type Connection struct {
@@ -30,19 +159,25 @@ type Server struct {
 	la string
 }
 
-// Handler interface for handling incoming policy requests and returning the
-// corresponding action
-type Handler interface {
-	Handle() string
-}
+// polSetFunc is a function alias that tries to fit a given value into a PolicySet
+type polSetFunc func(*PolicySet, string)
 
 // ServerOpt is an override function for the New() method
 type ServerOpt func(*Server)
 
+// PostfixResp is a possible response value for the policy request
+type PostfixResp string
+
+// Handler interface for handling incoming policy requests and returning the
+// corresponding action
+type Handler interface {
+	Handle(*PolicySet) PostfixResp
+}
+
 // New returns a new server object
 func New(options ...ServerOpt) Server {
 	s := Server{
-		lp: "12346",
+		lp: "10005",
 		la: "0.0.0.0",
 	}
 	for _, o := range options {
@@ -96,10 +231,7 @@ func (s *Server) Run(ctx context.Context, h Handler) error {
 			h:    h,
 		}
 
-		connId, err := uuid.NewUUID()
-		if err != nil {
-			el.Printf("failed to generate UUID: %s", err)
-		}
+		connId := xid.New()
 		conCtx := context.WithValue(ctx, "id", connId.String())
 		go connHandler(conCtx, conn)
 	}
@@ -110,22 +242,21 @@ func (s *Server) Run(ctx context.Context, h Handler) error {
 func connHandler(ctx context.Context, c *Connection) {
 	connId := ctx.Value("id").(string)
 	cl := log.New(os.Stderr, fmt.Sprintf("[%s] ERROR: ", connId), log.Lmsgprefix|log.LstdFlags)
-	cl.Printf("new connection from %s", c.conn.RemoteAddr())
+	cl.Println("Hello")
 
-	done := make(chan bool)
-	defer close(done)
+	// Channel to close connection in case of an error
+	cc := make(chan bool)
+	defer close(cc)
 
-	// Make sure to close the connection when our context is done
+	// Make sure to close the connection when our context is cc
 	go func() {
 		select {
 		case <-ctx.Done():
-		case <-done:
+		case <-cc:
 			if c.err != nil {
 				cl.Printf("closing connection due to an unexpected error: ", c.err)
 			}
 		}
-
-		cl.Print("closing connection...")
 		if err := c.conn.Close(); err != nil {
 			cl.Printf("failed to close connection: %s", err)
 		}
@@ -133,19 +264,19 @@ func connHandler(ctx context.Context, c *Connection) {
 	}()
 
 	for !c.cc {
-		kvMap := make(map[string]string, 0)
+		ps := &PolicySet{}
 		for {
 			l, err := c.rb.ReadString('\n')
 			if err != nil {
 				if err == io.EOF {
-					done <- true
+					cc <- true
 					break
 				}
 				if _, ok := err.(*net.OpError); ok {
 					break
 				}
 				c.err = err
-				done <- true
+				cc <- true
 			}
 			l = strings.TrimRight(l, "\n\n")
 			if l == "" {
@@ -155,20 +286,22 @@ func connHandler(ctx context.Context, c *Connection) {
 			if len(sl) != 2 {
 				continue
 			}
-			kvMap[sl[0]] = sl[1]
+			if f, ok := polSetFuncs[sl[0]]; ok {
+				f(ps, sl[1])
+			}
 		}
 
-		if (len(kvMap)) > 0 {
-			cl.Printf("%+v", kvMap)
+		if ps.Request != "" {
+			resp := c.h.Handle(ps)
 			if err := c.conn.SetWriteDeadline(time.Now().Add(time.Second)); err != nil {
 				c.err = fmt.Errorf("failed to set write deadline on connection: %s", err.Error())
-				done <- true
+				cc <- true
 			}
-			if _, err := c.conn.Write([]byte("action=DUNNO\n\n")); err != nil {
+			sResp := fmt.Sprintf("action=%s\n\n", resp)
+			if _, err := c.conn.Write([]byte(sResp)); err != nil {
 				c.err = fmt.Errorf("failed to write respone on connection: %s", err.Error())
-				done <- true
+				cc <- true
 			}
 		}
-		//foo := c.h.Handle()
 	}
 }

@@ -5,10 +5,11 @@
 [Postfix SMTP Access Policy Delegation Servers](http://www.postfix.org/SMTPD_POLICY_README.html) in Go.
 
 ## Usage
-`pps` provides a simple way to start a new TCP server that listens for incoming policy requests from
+The `pps` framework allows you to start a new TCP server that listens for incoming policy requests from
 a Postfix mail server. Once a new connection is established and the dataset from Postfix has been sent, 
-the data will be processed as a `PolicySet` and handed to a provided `Handle()` method that is provided
-by the user, using `pps`'s `Handler` interface.
+the data will be processed as a [PolicySet](https://pkg.go.dev/github.com/wneessen/postfix-policy-server#PolicySet) 
+and handed to a provided `Handle()` method that is provided by the user, using `pps`'s 
+[Handler](https://pkg.go.dev/github.com/wneessen/postfix-policy-server#Handler) interface.
 
 Check out the [Go reference](https://pkg.go.dev/github.com/wneessen/postfix-policy-server) for further
 details or have a look at the example [echo-server](example-code/echo-server) that is provided with this package.

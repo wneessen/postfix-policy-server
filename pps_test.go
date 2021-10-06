@@ -284,3 +284,50 @@ func TestRunDialResponses(t *testing.T) {
 		})
 	}
 }
+
+// TestRunDialWithRequestSocket starts a new server listening for connections on a UNIX socket,
+// tries to connect to it and sends example data
+func TestRunDialWithRequestSocket(t *testing.T) {
+	s := New()
+	sctx, scancel := context.WithCancel(context.Background())
+	defer scancel()
+	vsctx := context.WithValue(sctx, CtxNoLog, true)
+	us := "/tmp/pps_test_server"
+	l, err := net.Listen("unix", us)
+	if err != nil {
+		t.Errorf("failed to create new UNIX socket listener: %s", err)
+	}
+
+	h := Hi{}
+	go func() {
+		if err := s.RunWithListener(l, vsctx, h); err != nil {
+			t.Errorf("could not run server: %s", err)
+		}
+	}()
+
+	// Wait a brief moment for the server to start
+	time.Sleep(time.Millisecond * 200)
+
+	d := net.Dialer{}
+	cctx, ccancel := context.WithTimeout(context.Background(), time.Millisecond*500)
+	defer ccancel()
+	conn, err := d.DialContext(cctx, "unix", us)
+	if err != nil {
+		t.Errorf("failed to connect to running server: %s", err)
+		return
+	}
+	defer func() { _ = conn.Close() }()
+	rb := bufio.NewReader(conn)
+	_, err = conn.Write([]byte(exampleReq))
+	if err != nil {
+		t.Errorf("failed to send request to server: %s", err)
+	}
+	resp, err := rb.ReadString('\n')
+	if err != nil {
+		t.Errorf("failed to read response from server: %s", err)
+	}
+	exresp := fmt.Sprintf("action=%s\n", RespDunno)
+	if resp != exresp {
+		t.Errorf("unexpected server response => expected: %s, got: %s", exresp, resp)
+	}
+}

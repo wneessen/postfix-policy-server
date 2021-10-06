@@ -237,6 +237,16 @@ func (s *Server) SetAddr(a string) {
 
 // Run starts a server based on the Server object
 func (s *Server) Run(ctx context.Context, h Handler) error {
+	sa := net.JoinHostPort(s.la, s.lp)
+	l, err := net.Listen("tcp", sa)
+	if err != nil {
+		return err
+	}
+	return s.RunWithListener(l, ctx, h)
+}
+
+// RunWithListener starts a server based on the Server object with a given network listener
+func (s *Server) RunWithListener(l net.Listener, ctx context.Context, h Handler) error {
 	el := log.New(os.Stderr, "[Server] ERROR: ", log.Lmsgprefix|log.LstdFlags|log.Lshortfile)
 	noLog := false
 	ok, nlv := ctx.Value(CtxNoLog).(bool)
@@ -244,11 +254,6 @@ func (s *Server) Run(ctx context.Context, h Handler) error {
 		noLog = nlv
 	}
 
-	sa := net.JoinHostPort(s.la, s.lp)
-	l, err := net.Listen("tcp", sa)
-	if err != nil {
-		return err
-	}
 	go func() {
 		<-ctx.Done()
 		if err := l.Close(); err != nil && !noLog {

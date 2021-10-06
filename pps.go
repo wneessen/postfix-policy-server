@@ -21,6 +21,17 @@ const DefaultAddr = "0.0.0.0"
 // DefaultPort is the default port the server is listening on
 const DefaultPort = "10005"
 
+// CtxKey represents the different key ids for values added to contexts
+type CtxKey int
+
+const (
+	// CtxConnId represents the connection id in the connection context
+	CtxConnId CtxKey = iota
+)
+
+// PostfixResp is a possible response value for the policy request
+type PostfixResp string
+
 // Possible responses to the postfix server
 // See: http://www.postfix.org/access.5.html
 const (
@@ -171,9 +182,6 @@ type polSetFunc func(*PolicySet, string)
 // ServerOpt is an override function for the New() method
 type ServerOpt func(*Server)
 
-// PostfixResp is a possible response value for the policy request
-type PostfixResp string
-
 // Handler interface for handling incoming policy requests and returning the
 // corresponding action
 type Handler interface {
@@ -219,9 +227,7 @@ func (s *Server) Run(ctx context.Context, h Handler) error {
 		return err
 	}
 	go func() {
-		select {
-		case <-ctx.Done():
-		}
+		<-ctx.Done()
 		if err := l.Close(); err != nil {
 			el.Printf("failed to close listener: %s", err)
 		}
@@ -242,7 +248,7 @@ func (s *Server) Run(ctx context.Context, h Handler) error {
 		}
 
 		connId := xid.New()
-		conCtx := context.WithValue(ctx, "id", connId)
+		conCtx := context.WithValue(ctx, CtxConnId, connId)
 		go connHandler(conCtx, conn)
 	}
 
@@ -252,7 +258,7 @@ func (s *Server) Run(ctx context.Context, h Handler) error {
 // connHandler processes the incoming policy connection request and hands it to the
 // Handle function of the Handler interface
 func connHandler(ctx context.Context, c *Connection) {
-	connId, ok := ctx.Value("id").(xid.ID)
+	connId, ok := ctx.Value(CtxConnId).(xid.ID)
 	if !ok {
 		log.Print("failed to retrieve connection id from context.")
 		return
@@ -294,7 +300,7 @@ func connHandler(ctx context.Context, c *Connection) {
 				c.err = err
 				cc <- true
 			}
-			l = strings.TrimRight(l, "\n\n")
+			l = strings.TrimRight(l, "\n")
 			if l == "" {
 				break
 			}

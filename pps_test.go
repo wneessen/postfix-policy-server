@@ -122,7 +122,7 @@ func TestRun(t *testing.T) {
 
 // TestRunDial starts a new server listening for connections and tries to connect to it
 func TestRunDial(t *testing.T) {
-	s := New()
+	s := New(WithPort("44440"))
 	sctx, scancel := context.WithCancel(context.Background())
 	defer scancel()
 
@@ -148,15 +148,12 @@ func TestRunDial(t *testing.T) {
 	if err := conn.Close(); err != nil {
 		t.Errorf("failed to close client connection: %s", err)
 	}
-
-	// Wait a brief moment for the connection to close
-	time.Sleep(time.Millisecond * 500)
 }
 
 // TestRunDialWithRequest starts a new server listening for connections and tries to connect to it
 // and sends example data
 func TestRunDialWithRequest(t *testing.T) {
-	s := New()
+	s := New(WithPort("44441"))
 	sctx, scancel := context.WithCancel(context.Background())
 	defer scancel()
 

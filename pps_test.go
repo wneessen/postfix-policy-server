@@ -10,11 +10,16 @@ import (
 )
 
 // Empty struct to test the Handler interface
-type Hi struct{}
+type Hi struct {
+	r PostfixResp
+}
 
 // Handle is the function required by the Handler Interface
 func (h Hi) Handle(*PolicySet) PostfixResp {
-	return RespDunno
+	if h.r == "" {
+		h.r = RespDunno
+	}
+	return h.r
 }
 
 const exampleReq = `request=smtpd_access_policy
@@ -110,9 +115,10 @@ func TestRun(t *testing.T) {
 			s := New(WithAddr(tc.listenAddr), WithPort(tc.listenPort))
 			ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*200)
 			defer cancel()
+			vctx := context.WithValue(ctx, CtxNoLog, true)
 
 			h := Hi{}
-			err := s.Run(ctx, h)
+			err := s.Run(vctx, h)
 			if err != nil && !tc.shouldFail {
 				t.Errorf("could not run server: %s", err)
 			}
@@ -125,10 +131,11 @@ func TestRunDial(t *testing.T) {
 	s := New(WithPort("44440"))
 	sctx, scancel := context.WithCancel(context.Background())
 	defer scancel()
+	vsctx := context.WithValue(sctx, CtxNoLog, true)
 
 	h := Hi{}
 	go func() {
-		if err := s.Run(sctx, h); err != nil {
+		if err := s.Run(vsctx, h); err != nil {
 			t.Errorf("could not run server: %s", err)
 		}
 	}()
@@ -156,10 +163,11 @@ func TestRunDialWithRequest(t *testing.T) {
 	s := New(WithPort("44441"))
 	sctx, scancel := context.WithCancel(context.Background())
 	defer scancel()
+	vsctx := context.WithValue(sctx, CtxNoLog, true)
 
 	h := Hi{}
 	go func() {
-		if err := s.Run(sctx, h); err != nil {
+		if err := s.Run(vsctx, h); err != nil {
 			t.Errorf("could not run server: %s", err)
 		}
 	}()
@@ -189,5 +197,69 @@ func TestRunDialWithRequest(t *testing.T) {
 	exresp := fmt.Sprintf("action=%s\n", RespDunno)
 	if resp != exresp {
 		t.Errorf("unexpected server response => expected: %s, got: %s", exresp, resp)
+	}
+}
+
+// TestRunDialReponses starts a new server listening for connections and tries to connect to it,
+// sends example data and tests all possible responses
+func TestRunDialResponses(t *testing.T) {
+	testTable := []struct {
+		testName string
+		response PostfixResp
+	}{
+		{`Test OK`, RespOk},
+		{`Test REJECT`, RespReject},
+		{`Test DEFER`, RespDefer},
+		{`Test DEFER_IF_REJECT`, RespDeferIfReject},
+		{`Test DEFER_IF_PERMIT`, RespDeferIfPermit},
+		{`Test DISCARD`, RespDiscard},
+		{`Test DUNNO`, RespDunno},
+		{`Test HOLD`, RespHold},
+		{`Test INFO`, RespInfo},
+		{`Test WARN`, RespWarn},
+	}
+	sport := 44442
+
+	for _, tc := range testTable {
+		t.Run(tc.testName, func(t *testing.T) {
+			s := New(WithPort(fmt.Sprintf("%d", sport)))
+			sctx, scancel := context.WithCancel(context.Background())
+			defer scancel()
+			vsctx := context.WithValue(sctx, CtxNoLog, true)
+			h := Hi{r: tc.response}
+			go func() {
+				if err := s.Run(vsctx, h); err != nil {
+					t.Errorf("could not run server: %s", err)
+				}
+			}()
+
+			// Wait a brief moment for the server to start
+			time.Sleep(time.Millisecond * 200)
+
+			d := net.Dialer{}
+			cctx, ccancel := context.WithTimeout(context.Background(), time.Millisecond*500)
+			defer ccancel()
+			conn, err := d.DialContext(cctx, "tcp",
+				fmt.Sprintf("%s:%s", s.la, s.lp))
+			if err != nil {
+				t.Errorf("failed to connect to running server: %s", err)
+				return
+			}
+			defer func() { _ = conn.Close() }()
+			rb := bufio.NewReader(conn)
+			_, err = conn.Write([]byte(exampleReq))
+			if err != nil {
+				t.Errorf("failed to send request to server: %s", err)
+			}
+			resp, err := rb.ReadString('\n')
+			if err != nil {
+				t.Errorf("failed to read response from server: %s", err)
+			}
+			exresp := fmt.Sprintf("action=%s\n", tc.response)
+			if resp != exresp {
+				t.Errorf("unexpected server response => expected: %s, got: %s", exresp, resp)
+			}
+			sport++
+		})
 	}
 }

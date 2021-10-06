@@ -27,6 +27,10 @@ type CtxKey int
 const (
 	// CtxConnId represents the connection id in the connection context
 	CtxConnId CtxKey = iota
+
+	// CtxNoLog lets the user control wether the server should log to
+	// STDERR or not
+	CtxNoLog
 )
 
 // PostfixResp is a possible response value for the policy request
@@ -220,7 +224,13 @@ func WithAddr(a string) ServerOpt {
 
 // Run starts a server based on the Server object
 func (s *Server) Run(ctx context.Context, h Handler) error {
-	el := log.New(os.Stderr, "[Server] ERROR: ", log.Lmsgprefix|log.LstdFlags)
+	el := log.New(os.Stderr, "[Server] ERROR: ", log.Lmsgprefix|log.LstdFlags|log.Lshortfile)
+	noLog := false
+	ok, nlv := ctx.Value(CtxNoLog).(bool)
+	if ok {
+		noLog = nlv
+	}
+
 	sa := net.JoinHostPort(s.la, s.lp)
 	l, err := net.Listen("tcp", sa)
 	if err != nil {
@@ -228,7 +238,7 @@ func (s *Server) Run(ctx context.Context, h Handler) error {
 	}
 	go func() {
 		<-ctx.Done()
-		if err := l.Close(); err != nil {
+		if err := l.Close(); err != nil && !noLog {
 			el.Printf("failed to close listener: %s", err)
 		}
 	}()
@@ -237,7 +247,9 @@ func (s *Server) Run(ctx context.Context, h Handler) error {
 	for {
 		c, err := l.Accept()
 		if err != nil {
-			el.Printf("failed to accept new connection: %s", err)
+			if !noLog {
+				el.Printf("failed to accept new connection: %s", err)
+			}
 			break
 		}
 		conn := &Connection{
@@ -264,7 +276,12 @@ func connHandler(ctx context.Context, c *Connection) {
 		return
 	}
 	cl := log.New(os.Stderr, fmt.Sprintf("[%s] ERROR: ", connId.String()),
-		log.Lmsgprefix|log.LstdFlags)
+		log.Lmsgprefix|log.LstdFlags|log.Lshortfile)
+	noLog := false
+	ok, nlv := ctx.Value(CtxNoLog).(bool)
+	if ok {
+		noLog = nlv
+	}
 
 	// Channel to close connection in case of an error
 	cc := make(chan bool)
@@ -275,11 +292,11 @@ func connHandler(ctx context.Context, c *Connection) {
 		select {
 		case <-ctx.Done():
 		case <-cc:
-			if c.err != nil {
+			if c.err != nil && noLog {
 				cl.Printf("closing connection due to an unexpected error: %s", c.err)
 			}
 		}
-		if err := c.conn.Close(); err != nil {
+		if err := c.conn.Close(); err != nil && !noLog {
 			cl.Printf("failed to close connection: %s", err)
 		}
 		c.cc = true

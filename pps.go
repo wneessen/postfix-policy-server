@@ -25,8 +25,8 @@ const DefaultPort = "10005"
 type CtxKey int
 
 const (
-	// CtxConnId represents the connection id in the connection context
-	CtxConnId CtxKey = iota
+	// ctxConnId represents the connection id in the connection context
+	ctxConnId CtxKey = iota
 
 	// CtxNoLog lets the user control wether the server should log to
 	// STDERR or not
@@ -273,7 +273,7 @@ func (s *Server) Run(ctx context.Context, h Handler) error {
 		}
 
 		connId := xid.New()
-		conCtx := context.WithValue(ctx, CtxConnId, connId)
+		conCtx := context.WithValue(ctx, ctxConnId, connId)
 		go connHandler(conCtx, conn)
 	}
 
@@ -283,7 +283,7 @@ func (s *Server) Run(ctx context.Context, h Handler) error {
 // connHandler processes the incoming policy connection request and hands it to the
 // Handle function of the Handler interface
 func connHandler(ctx context.Context, c *Connection) {
-	connId, ok := ctx.Value(CtxConnId).(xid.ID)
+	connId, ok := ctx.Value(ctxConnId).(xid.ID)
 	if !ok {
 		log.Print("failed to retrieve connection id from context.")
 		return

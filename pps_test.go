@@ -148,6 +148,9 @@ func TestRunDial(t *testing.T) {
 	if err := conn.Close(); err != nil {
 		t.Errorf("failed to close client connection: %s", err)
 	}
+
+	// Wait a brief moment for the connection to close
+	time.Sleep(time.Millisecond * 500)
 }
 
 // TestRunDialWithRequest starts a new server listening for connections and tries to connect to it

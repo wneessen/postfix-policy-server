@@ -242,7 +242,7 @@ func (s *Server) Run(ctx context.Context, h Handler) error {
 		}
 
 		connId := xid.New()
-		conCtx := context.WithValue(ctx, "id", connId.String())
+		conCtx := context.WithValue(ctx, "id", connId)
 		go connHandler(conCtx, conn)
 	}
 
@@ -252,8 +252,13 @@ func (s *Server) Run(ctx context.Context, h Handler) error {
 // connHandler processes the incoming policy connection request and hands it to the
 // Handle function of the Handler interface
 func connHandler(ctx context.Context, c *Connection) {
-	connId := ctx.Value("id").(string)
-	cl := log.New(os.Stderr, fmt.Sprintf("[%s] ERROR: ", connId), log.Lmsgprefix|log.LstdFlags)
+	connId, ok := ctx.Value("id").(xid.ID)
+	if !ok {
+		log.Print("failed to retrieve connection id from context.")
+		return
+	}
+	cl := log.New(os.Stderr, fmt.Sprintf("[%s] ERROR: ", connId.String()),
+		log.Lmsgprefix|log.LstdFlags)
 
 	// Channel to close connection in case of an error
 	cc := make(chan bool)

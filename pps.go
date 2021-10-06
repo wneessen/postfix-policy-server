@@ -310,7 +310,7 @@ func connHandler(ctx context.Context, c *Connection) {
 			}
 			sResp := fmt.Sprintf("action=%s\n\n", resp)
 			if _, err := c.conn.Write([]byte(sResp)); err != nil {
-				c.err = fmt.Errorf("failed to write respone on connection: %s", err.Error())
+				c.err = fmt.Errorf("failed to write response on connection: %s", err.Error())
 				cc <- true
 			}
 		}

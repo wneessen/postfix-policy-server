@@ -12,7 +12,7 @@ import (
 // Empty struct to test the Handler interface
 type Hi struct{}
 
-// Handle is the function requred by the Handler Interface
+// Handle is the function required by the Handler Interface
 func (h Hi) Handle(*PolicySet) PostfixResp {
 	return RespDunno
 }

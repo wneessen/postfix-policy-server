@@ -162,6 +162,9 @@ type PolicySet struct {
 	// Postfix version 3.2 and later
 	ServerAddress net.IP
 	ServerPort    uint64
+
+	// postfix-policy-server specific values
+	PPSConnId string
 }
 
 // Connection represents an incoming policy server connection
@@ -313,7 +316,7 @@ func connHandler(ctx context.Context, c *Connection) {
 	}()
 
 	for !c.cc {
-		ps := &PolicySet{}
+		ps := &PolicySet{PPSConnId: connId.String()}
 		for {
 			l, err := c.rb.ReadString('\n')
 			if err != nil {

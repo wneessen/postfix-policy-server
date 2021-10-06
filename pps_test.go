@@ -228,23 +228,23 @@ func TestRunDialResponses(t *testing.T) {
 	testTable := []struct {
 		testName string
 		response PostfixResp
+		port     uint
 	}{
-		{`Test OK`, RespOk},
-		{`Test REJECT`, RespReject},
-		{`Test DEFER`, RespDefer},
-		{`Test DEFER_IF_REJECT`, RespDeferIfReject},
-		{`Test DEFER_IF_PERMIT`, RespDeferIfPermit},
-		{`Test DISCARD`, RespDiscard},
-		{`Test DUNNO`, RespDunno},
-		{`Test HOLD`, RespHold},
-		{`Test INFO`, RespInfo},
-		{`Test WARN`, RespWarn},
+		{`Test OK`, RespOk, 44442},
+		{`Test REJECT`, RespReject, 44443},
+		{`Test DEFER`, RespDefer, 44444},
+		{`Test DEFER_IF_REJECT`, RespDeferIfReject, 44445},
+		{`Test DEFER_IF_PERMIT`, RespDeferIfPermit, 44446},
+		{`Test DISCARD`, RespDiscard, 44447},
+		{`Test DUNNO`, RespDunno, 44448},
+		{`Test HOLD`, RespHold, 44449},
+		{`Test INFO`, RespInfo, 44450},
+		{`Test WARN`, RespWarn, 44451},
 	}
-	sport := 44442
 
 	for _, tc := range testTable {
 		t.Run(tc.testName, func(t *testing.T) {
-			s := New(WithPort(fmt.Sprintf("%d", sport)))
+			s := New(WithPort(fmt.Sprintf("%d", tc.port)))
 			sctx, scancel := context.WithCancel(context.Background())
 			defer scancel()
 			vsctx := context.WithValue(sctx, CtxNoLog, true)
@@ -281,7 +281,6 @@ func TestRunDialResponses(t *testing.T) {
 			if resp != exresp {
 				t.Errorf("unexpected server response => expected: %s, got: %s", exresp, resp)
 			}
-			sport++
 		})
 	}
 }

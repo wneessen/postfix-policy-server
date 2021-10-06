@@ -15,6 +15,12 @@ import (
 	"github.com/rs/xid"
 )
 
+// DefaultAddr is the default address the server is listening on
+const DefaultAddr = "0.0.0.0"
+
+// DefaultPort is the default port the server is listening on
+const DefaultPort = "10005"
+
 // Possible responses to the postfix server
 // See: http://www.postfix.org/access.5.html
 const (
@@ -177,8 +183,8 @@ type Handler interface {
 // New returns a new server object
 func New(options ...ServerOpt) Server {
 	s := Server{
-		lp: "10005",
-		la: "0.0.0.0",
+		lp: DefaultPort,
+		la: DefaultAddr,
 	}
 	for _, o := range options {
 		if o == nil {
@@ -212,7 +218,10 @@ func (s *Server) Run(ctx context.Context, h Handler) error {
 	if err != nil {
 		return err
 	}
-	defer func() {
+	go func() {
+		select {
+		case <-ctx.Done():
+		}
 		if err := l.Close(); err != nil {
 			el.Printf("failed to close listener: %s", err)
 		}
@@ -223,6 +232,7 @@ func (s *Server) Run(ctx context.Context, h Handler) error {
 		c, err := l.Accept()
 		if err != nil {
 			el.Printf("failed to accept new connection: %s", err)
+			break
 		}
 		conn := &Connection{
 			conn: c,
@@ -235,6 +245,8 @@ func (s *Server) Run(ctx context.Context, h Handler) error {
 		conCtx := context.WithValue(ctx, "id", connId.String())
 		go connHandler(conCtx, conn)
 	}
+
+	return nil
 }
 
 // connHandler processes the incoming policy connection request and hands it to the
@@ -242,7 +254,6 @@ func (s *Server) Run(ctx context.Context, h Handler) error {
 func connHandler(ctx context.Context, c *Connection) {
 	connId := ctx.Value("id").(string)
 	cl := log.New(os.Stderr, fmt.Sprintf("[%s] ERROR: ", connId), log.Lmsgprefix|log.LstdFlags)
-	cl.Println("Hello")
 
 	// Channel to close connection in case of an error
 	cc := make(chan bool)
@@ -254,7 +265,7 @@ func connHandler(ctx context.Context, c *Connection) {
 		case <-ctx.Done():
 		case <-cc:
 			if c.err != nil {
-				cl.Printf("closing connection due to an unexpected error: ", c.err)
+				cl.Printf("closing connection due to an unexpected error: %s", c.err)
 			}
 		}
 		if err := c.conn.Close(); err != nil {

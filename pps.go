@@ -222,6 +222,16 @@ func WithAddr(a string) ServerOpt {
 	}
 }
 
+// SetPort will override the listening port on an already existing policy server
+func (s *Server) SetPort(p string) {
+	s.lp = p
+}
+
+// SetAddr will override the listening address on an already existing policy server
+func (s *Server) SetAddr(a string) {
+	s.la = a
+}
+
 // Run starts a server based on the Server object
 func (s *Server) Run(ctx context.Context, h Handler) error {
 	el := log.New(os.Stderr, "[Server] ERROR: ", log.Lmsgprefix|log.LstdFlags|log.Lshortfile)

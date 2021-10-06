@@ -58,11 +58,11 @@ policy_context=
 func TestNew(t *testing.T) {
 	s := New()
 	if s.lp != DefaultPort {
-		t.Errorf("policy server ceation failed: configured port mismatch => Expected: %s, got: %s",
+		t.Errorf("policy server creation failed: configured port mismatch => Expected: %s, got: %s",
 			DefaultPort, s.lp)
 	}
 	if s.la != DefaultAddr {
-		t.Errorf("policy server ceation failed: configured listen address mismatch => Expected: %s, got: %s",
+		t.Errorf("policy server creation failed: configured listen address mismatch => Expected: %s, got: %s",
 			DefaultAddr, s.la)
 	}
 }
@@ -72,7 +72,7 @@ func TestNewWithAddr(t *testing.T) {
 	a := "1.2.3.4"
 	s := New(WithAddr(a))
 	if s.la != a {
-		t.Errorf("policy server ceation failed: configured listen address mismatch => Expected: %s, got: %s",
+		t.Errorf("policy server creation failed: configured listen address mismatch => Expected: %s, got: %s",
 			a, s.la)
 	}
 }
@@ -82,7 +82,29 @@ func TestNewWithPort(t *testing.T) {
 	p := "1234"
 	s := New(WithPort(p))
 	if s.lp != p {
-		t.Errorf("policy server ceation failed: configured listen address mismatch => Expected: %s, got: %s",
+		t.Errorf("policy server creation failed: configured listen address mismatch => Expected: %s, got: %s",
+			p, s.lp)
+	}
+}
+
+// TestSetAddr tests the SetAddr() option on an existing policy server
+func TestSetAddr(t *testing.T) {
+	a := "1.2.3.4"
+	s := New()
+	s.SetAddr(a)
+	if s.la != a {
+		t.Errorf("policy server address setting failed => Expected: %s, got: %s",
+			a, s.la)
+	}
+}
+
+// TestSetPort tests the SetPort() option on an existing policy server
+func TestSetPort(t *testing.T) {
+	p := "1234"
+	s := New()
+	s.SetPort(p)
+	if s.lp != p {
+		t.Errorf("policy server port setting failed => Expected: %s, got: %s",
 			p, s.lp)
 	}
 }
@@ -92,7 +114,7 @@ func TestNewWithEmptyOpt(t *testing.T) {
 	emptyOpt := func(p *string) ServerOpt { return nil }
 	s := New(emptyOpt(nil))
 	if s.lp != DefaultPort {
-		t.Errorf("policy server ceation failed: configured listen address mismatch => Expected: %s, got: %s",
+		t.Errorf("policy server creation failed: configured listen address mismatch => Expected: %s, got: %s",
 			DefaultPort, s.lp)
 	}
 }

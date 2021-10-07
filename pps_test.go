@@ -335,3 +335,119 @@ func TestRunDialWithRequestSocket(t *testing.T) {
 		t.Errorf("unexpected server response => expected: %s, got: %s", exresp, resp)
 	}
 }
+
+// TestRunDialOptTextResponse starts a new server listening for connections and tries to connect to it,
+// sends example data and tests the TextResponseOpt() method
+func TestRunDialTextResponseOpt(t *testing.T) {
+	testTable := []struct {
+		testName    string
+		postfixResp PostfixResp
+		optText     string
+		port        uint
+	}{
+		{`Test OK`, RespOk, "testtext", 44460},
+	}
+
+	for _, tc := range testTable {
+		t.Run(tc.testName, func(t *testing.T) {
+			s := New(WithPort(fmt.Sprintf("%d", tc.port)))
+			sctx, scancel := context.WithCancel(context.Background())
+			defer scancel()
+			vsctx := context.WithValue(sctx, CtxNoLog, true)
+
+			custResp := TextResponseOpt(tc.postfixResp, tc.optText)
+			h := Hi{r: custResp}
+			go func() {
+				if err := s.Run(vsctx, h); err != nil {
+					t.Errorf("could not run server: %s", err)
+				}
+			}()
+
+			// Wait a brief moment for the server to start
+			time.Sleep(time.Millisecond * 200)
+
+			d := net.Dialer{}
+			cctx, ccancel := context.WithTimeout(context.Background(), time.Millisecond*500)
+			defer ccancel()
+			conn, err := d.DialContext(cctx, "tcp",
+				fmt.Sprintf("%s:%s", s.la, s.lp))
+			if err != nil {
+				t.Errorf("failed to connect to running server: %s", err)
+				return
+			}
+			defer func() { _ = conn.Close() }()
+			rb := bufio.NewReader(conn)
+			_, err = conn.Write([]byte(exampleReq))
+			if err != nil {
+				t.Errorf("failed to send request to server: %s", err)
+			}
+			resp, err := rb.ReadString('\n')
+			if err != nil {
+				t.Errorf("failed to read response from server: %s", err)
+			}
+			exresp := fmt.Sprintf("action=%s %s\n", tc.postfixResp, tc.optText)
+			if resp != exresp {
+				t.Errorf("unexpected server response => expected: %s, got: %s", exresp, resp)
+			}
+		})
+	}
+}
+
+// TestRunDialNonOptTextResponse starts a new server listening for connections and tries to connect to it,
+// sends example data and tests the TextResponseNonOpt() method
+func TestRunDialTextResponseNonOpt(t *testing.T) {
+	testTable := []struct {
+		testName    string
+		postfixResp PostfixTextResp
+		optText     string
+		port        uint
+	}{
+		{`Test PREPEND`, TextRespPrepend, "headername: headervalue", 44461},
+		{`Test FILTER`, TextRespFilter, "transport:destination", 44462},
+		{`Test REDIRECT`, TextRespRedirect, "user@domain", 44463},
+	}
+
+	for _, tc := range testTable {
+		t.Run(tc.testName, func(t *testing.T) {
+			s := New(WithPort(fmt.Sprintf("%d", tc.port)))
+			sctx, scancel := context.WithCancel(context.Background())
+			defer scancel()
+			vsctx := context.WithValue(sctx, CtxNoLog, true)
+
+			custResp := TextResponseNonOpt(tc.postfixResp, tc.optText)
+			h := Hi{r: custResp}
+			go func() {
+				if err := s.Run(vsctx, h); err != nil {
+					t.Errorf("could not run server: %s", err)
+				}
+			}()
+
+			// Wait a brief moment for the server to start
+			time.Sleep(time.Millisecond * 200)
+
+			d := net.Dialer{}
+			cctx, ccancel := context.WithTimeout(context.Background(), time.Millisecond*500)
+			defer ccancel()
+			conn, err := d.DialContext(cctx, "tcp",
+				fmt.Sprintf("%s:%s", s.la, s.lp))
+			if err != nil {
+				t.Errorf("failed to connect to running server: %s", err)
+				return
+			}
+			defer func() { _ = conn.Close() }()
+			rb := bufio.NewReader(conn)
+			_, err = conn.Write([]byte(exampleReq))
+			if err != nil {
+				t.Errorf("failed to send request to server: %s", err)
+			}
+			resp, err := rb.ReadString('\n')
+			if err != nil {
+				t.Errorf("failed to read response from server: %s", err)
+			}
+			exresp := fmt.Sprintf("action=%s %s\n", tc.postfixResp, tc.optText)
+			if resp != exresp {
+				t.Errorf("unexpected server response => expected: %s, got: %s", exresp, resp)
+			}
+		})
+	}
+}

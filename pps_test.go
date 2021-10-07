@@ -304,7 +304,7 @@ func TestRunDialWithRequestSocket(t *testing.T) {
 
 	h := Hi{}
 	go func() {
-		if err := s.RunWithListener(l, vsctx, h); err != nil {
+		if err := s.RunWithListener(vsctx, h, l); err != nil {
 			t.Errorf("could not run server: %s", err)
 		}
 	}()

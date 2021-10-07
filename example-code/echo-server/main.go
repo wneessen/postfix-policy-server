@@ -39,7 +39,7 @@ func (h Hi) Handle(ps *pps.PolicySet) pps.PostfixResp {
 		return pps.RespWarn
 	}
 	fmt.Println(string(jps))
-	return pps.RespDunno
+	return pps.TextResponseOpt(pps.RespInfo, "this might be a cool mail!")
 }
 
 // main starts the server

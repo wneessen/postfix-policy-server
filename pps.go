@@ -51,7 +51,7 @@ const (
 	RespWarn          PostfixResp = "WARN"
 )
 
-// PostfixTextResp is a possible response value that requires additonal text
+// PostfixTextResp is a possible response value that requires additional text
 type PostfixTextResp string
 
 // Possible non-optional text responses to the postfix server
@@ -252,11 +252,11 @@ func (s *Server) Run(ctx context.Context, h Handler) error {
 	if err != nil {
 		return err
 	}
-	return s.RunWithListener(l, ctx, h)
+	return s.RunWithListener(ctx, h, l)
 }
 
 // RunWithListener starts a server based on the Server object with a given network listener
-func (s *Server) RunWithListener(l net.Listener, ctx context.Context, h Handler) error {
+func (s *Server) RunWithListener(ctx context.Context, h Handler, l net.Listener) error {
 	el := log.New(os.Stderr, "[Server] ERROR: ", log.Lmsgprefix|log.LstdFlags|log.Lshortfile)
 	noLog := false
 	ok, nlv := ctx.Value(CtxNoLog).(bool)

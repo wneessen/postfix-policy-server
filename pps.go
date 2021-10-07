@@ -51,6 +51,16 @@ const (
 	RespWarn          PostfixResp = "WARN"
 )
 
+// PostfixTextResp is a possible response value that requires additonal text
+type PostfixTextResp string
+
+// Possible non-optional text responses to the postfix server
+const (
+	TextRespFilter   PostfixTextResp = "FILTER"
+	TextRespPrepend  PostfixTextResp = "PREPEND"
+	TextRespRedirect PostfixTextResp = "REDIRECT"
+)
+
 // polSetFuncs is a map of polSetFunc that assigns a given value to a PolicySet
 // See http://www.postfix.org/SMTPD_POLICY_README.html for all supported values
 var polSetFuncs = map[string]polSetFunc{
@@ -167,8 +177,8 @@ type PolicySet struct {
 	PPSConnId string
 }
 
-// Connection represents an incoming policy server connection
-type Connection struct {
+// connection represents an incoming policy server connection
+type connection struct {
 	conn net.Conn
 	rb   *bufio.Reader
 	wb   *bufio.Writer
@@ -270,7 +280,7 @@ func (s *Server) RunWithListener(l net.Listener, ctx context.Context, h Handler)
 			}
 			break
 		}
-		conn := &Connection{
+		conn := &connection{
 			conn: c,
 			rb:   bufio.NewReader(c),
 			wb:   bufio.NewWriter(c),
@@ -287,7 +297,7 @@ func (s *Server) RunWithListener(l net.Listener, ctx context.Context, h Handler)
 
 // connHandler processes the incoming policy connection request and hands it to the
 // Handle function of the Handler interface
-func connHandler(ctx context.Context, c *Connection) {
+func connHandler(ctx context.Context, c *connection) {
 	connId, ok := ctx.Value(ctxConnId).(xid.ID)
 	if !ok {
 		log.Print("failed to retrieve connection id from context.")
@@ -361,4 +371,18 @@ func connHandler(ctx context.Context, c *Connection) {
 			}
 		}
 	}
+}
+
+// TextResponseOpt allows you to use a PostfixResp with an optional text as response to the
+// Postfix server
+func TextResponseOpt(rt PostfixResp, t string) PostfixResp {
+	r := PostfixResp(fmt.Sprintf("%s %s", rt, t))
+	return r
+}
+
+// TextResponseNonOpt allows you to use a PostfixTextResp with a non-optional text as response to the
+// Postfix server
+func TextResponseNonOpt(rt PostfixTextResp, t string) PostfixResp {
+	r := PostfixResp(fmt.Sprintf("%s %s", rt, t))
+	return r
 }

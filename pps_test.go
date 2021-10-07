@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"testing"
 	"time"
 )
@@ -297,6 +298,9 @@ func TestRunDialWithRequestSocket(t *testing.T) {
 	if err != nil {
 		t.Errorf("failed to create new UNIX socket listener: %s", err)
 	}
+	defer func() {
+		_ = os.Remove(us)
+	}()
 
 	h := Hi{}
 	go func() {

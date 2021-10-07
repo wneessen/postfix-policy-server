@@ -167,8 +167,8 @@ type PolicySet struct {
 	PPSConnId string
 }
 
-// Connection represents an incoming policy server connection
-type Connection struct {
+// connection represents an incoming policy server connection
+type connection struct {
 	conn net.Conn
 	rb   *bufio.Reader
 	wb   *bufio.Writer
@@ -270,7 +270,7 @@ func (s *Server) RunWithListener(l net.Listener, ctx context.Context, h Handler)
 			}
 			break
 		}
-		conn := &Connection{
+		conn := &connection{
 			conn: c,
 			rb:   bufio.NewReader(c),
 			wb:   bufio.NewWriter(c),
@@ -287,7 +287,7 @@ func (s *Server) RunWithListener(l net.Listener, ctx context.Context, h Handler)
 
 // connHandler processes the incoming policy connection request and hands it to the
 // Handle function of the Handler interface
-func connHandler(ctx context.Context, c *Connection) {
+func connHandler(ctx context.Context, c *connection) {
 	connId, ok := ctx.Value(ctxConnId).(xid.ID)
 	if !ok {
 		log.Print("failed to retrieve connection id from context.")

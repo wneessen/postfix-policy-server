@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"os"
@@ -180,8 +179,7 @@ type PolicySet struct {
 // connection represents an incoming policy server connection
 type connection struct {
 	conn net.Conn
-	rb   *bufio.Reader
-	wb   *bufio.Writer
+	rs   *bufio.Scanner
 	h    Handler
 	err  error
 	cc   bool
@@ -282,8 +280,7 @@ func (s *Server) RunWithListener(ctx context.Context, h Handler, l net.Listener)
 		}
 		conn := &connection{
 			conn: c,
-			rb:   bufio.NewReader(c),
-			wb:   bufio.NewWriter(c),
+			rs:   bufio.NewScanner(c),
 			h:    h,
 		}
 
@@ -332,32 +329,7 @@ func connHandler(ctx context.Context, c *connection) {
 
 	for !c.cc {
 		ps := &PolicySet{PPSConnId: connId.String()}
-		for {
-			l, err := c.rb.ReadString('\n')
-			if err != nil {
-				if err == io.EOF {
-					cc <- true
-					break
-				}
-				if _, ok := err.(*net.OpError); ok {
-					break
-				}
-				c.err = err
-				cc <- true
-			}
-			l = strings.TrimRight(l, "\n")
-			if l == "" {
-				break
-			}
-			sl := strings.Split(l, "=")
-			if len(sl) != 2 {
-				continue
-			}
-			if f, ok := polSetFuncs[sl[0]]; ok {
-				f(ps, sl[1])
-			}
-		}
-
+		processMsg(c, ps, cc)
 		if ps.Request != "" {
 			resp := c.h.Handle(ps)
 			if err := c.conn.SetWriteDeadline(time.Now().Add(time.Second)); err != nil {
@@ -370,6 +342,27 @@ func connHandler(ctx context.Context, c *connection) {
 				cc <- true
 			}
 		}
+	}
+}
+
+// processMsg processes the incoming policy message and updates the given PolicySet
+func processMsg(c *connection, ps *PolicySet, cc chan bool) {
+	for c.rs.Scan() {
+		l := c.rs.Text()
+		if l == "" {
+			break
+		}
+		sl := strings.SplitN(l, "=", 2)
+		if f, ok := polSetFuncs[sl[0]]; ok {
+			f(ps, sl[1])
+		}
+	}
+	if err := c.rs.Err(); err != nil {
+		if _, ok := err.(*net.OpError); ok {
+			return
+		}
+		c.err = err
+		cc <- true
 	}
 }
 

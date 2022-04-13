@@ -286,7 +286,15 @@ func (s *Server) RunWithListener(ctx context.Context, h Handler, l net.Listener)
 
 		connId := xid.New()
 		conCtx := context.WithValue(ctx, ctxConnId, connId)
-		go connHandler(conCtx, conn)
+		ec := make(chan error, 1)
+		go func() { ec <- connHandler(conCtx, conn) }()
+		select {
+		case <-conCtx.Done():
+			<-ec
+			return ctx.Err()
+		case err := <-ec:
+			return err
+		}
 	}
 
 	return nil
@@ -294,59 +302,31 @@ func (s *Server) RunWithListener(ctx context.Context, h Handler, l net.Listener)
 
 // connHandler processes the incoming policy connection request and hands it to the
 // Handle function of the Handler interface
-func connHandler(ctx context.Context, c *connection) {
+func connHandler(ctx context.Context, c *connection) error {
 	connId, ok := ctx.Value(ctxConnId).(xid.ID)
 	if !ok {
-		log.Print("failed to retrieve connection id from context.")
-		return
+		return fmt.Errorf("failed to retrieve connection id from context")
 	}
-	cl := log.New(os.Stderr, fmt.Sprintf("[%s] ERROR: ", connId.String()),
-		log.Lmsgprefix|log.LstdFlags|log.Lshortfile)
-	noLog := false
-	ok, nlv := ctx.Value(CtxNoLog).(bool)
-	if ok {
-		noLog = nlv
-	}
-
-	// Channel to close connection in case of an error
-	cc := make(chan bool)
-	defer close(cc)
-
-	// Make sure to close the connection when our context is cc
-	go func() {
-		select {
-		case <-ctx.Done():
-		case <-cc:
-			if c.err != nil && noLog {
-				cl.Printf("closing connection due to an unexpected error: %s", c.err)
-			}
-		}
-		if err := c.conn.Close(); err != nil && !noLog {
-			cl.Printf("failed to close connection: %s", err)
-		}
-		c.cc = true
-	}()
 
 	for !c.cc {
 		ps := &PolicySet{PPSConnId: connId.String()}
-		processMsg(c, ps, cc)
+		processMsg(c, ps)
 		if ps.Request != "" {
 			resp := c.h.Handle(ps)
 			if err := c.conn.SetWriteDeadline(time.Now().Add(time.Second)); err != nil {
 				c.err = fmt.Errorf("failed to set write deadline on connection: %s", err.Error())
-				cc <- true
 			}
 			sResp := fmt.Sprintf("action=%s\n\n", resp)
 			if _, err := c.conn.Write([]byte(sResp)); err != nil {
 				c.err = fmt.Errorf("failed to write response on connection: %s", err.Error())
-				cc <- true
 			}
 		}
 	}
+	return c.err
 }
 
 // processMsg processes the incoming policy message and updates the given PolicySet
-func processMsg(c *connection, ps *PolicySet, cc chan bool) {
+func processMsg(c *connection, ps *PolicySet) {
 	for c.rs.Scan() {
 		l := c.rs.Text()
 		if l == "" {
@@ -362,7 +342,6 @@ func processMsg(c *connection, ps *PolicySet, cc chan bool) {
 			return
 		}
 		c.err = err
-		cc <- true
 	}
 }
 
